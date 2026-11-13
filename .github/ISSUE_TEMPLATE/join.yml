@@ -1,0 +1,15 @@
+name: Join POE Builds
+description: Ask to join the group (build sharing in Loot Goblin)
+title: "Join request"
+labels: ["join-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit this form and the group owner gets a notification. Once approved, GitHub emails you an invite to **POE-Builds**: accept it, then sign in with GitHub in Loot Goblin.
+  - type: input
+    id: who
+    attributes:
+      label: Who are you? (in-game name or how the owner knows you)
+    validations:
+      required: true
