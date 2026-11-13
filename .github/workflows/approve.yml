@@ -1,0 +1,46 @@
+# Owner comments /approve on a join request -> the issue author is invited to POE-Builds.
+# Needs the secret ORG_INVITE_TOKEN (fine-grained, owner POE-Builds, Organization permission
+# "Members: Read and write"). Optional variable INVITE_TEAM_ID = numeric id of a team to add them to.
+name: Approve join request
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  issues: write
+jobs:
+  approve:
+    if: >-
+      !github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/approve') &&
+      contains(github.event.issue.labels.*.name, 'join-request')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          TEAM_ID: ${{ vars.INVITE_TEAM_ID }}
+          REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          github-token: ${{ secrets.ORG_INVITE_TOKEN }}
+          script: |
+            const org = 'POE-Builds'
+            const approver = context.payload.comment.user.login
+            const { data: m } = await github.rest.orgs.getMembershipForUser({ org, username: approver }).catch(() => ({ data: {} }))
+            if (m.role !== 'admin' || m.state !== 'active') {
+              core.notice(`${approver} is not an owner of ${org}; ignored`)
+              return
+            }
+            const user = context.payload.issue.user
+            const opts = { org, invitee_id: user.id, role: 'direct_member' }
+            if (process.env.TEAM_ID) opts.team_ids = [Number(process.env.TEAM_ID)]
+            let msg
+            try {
+              await github.rest.orgs.createInvitation(opts)
+              msg = `Approved by @${approver}. @${user.login}, check your email (or github.com/${org}) for the invite, accept it, then sign in with GitHub in Loot Goblin.`
+            } catch (e) {
+              msg = `Couldn't send the invite: ${e.message}`
+            }
+            // comments and closing use this repo's own token (the org token only manages members)
+            const repoGh = getOctokit(process.env.REPO_TOKEN).rest.issues
+            const issue = { owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number }
+            await repoGh.createComment({ ...issue, body: msg })
+            if (!msg.startsWith("Couldn't")) await repoGh.update({ ...issue, state: 'closed' })
